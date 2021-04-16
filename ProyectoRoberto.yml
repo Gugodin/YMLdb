@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: practica-pg
+
+---
+# volumen persistente
+apiVersion: v1
+kind: PersistentVolume #espacio en el que vivira
+metadata:
+  name: pv-pg
+spec: #Configuración de lo que va a contruir a nivel de disco
+  storageClassName: persistencia
+  capacity:
+    storage: 10Gi # Capacidad
+  accessModes:
+    - ReadWriteMany # Lectura y escritura
+  hostPath:
+    path: "/mnt/ac3-postgres" # Lugar donde guardara los datos
+
+---
+# reclamo de volumen
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-pg
+spec:
+  storageClassName: persistencia
+  accessModes:
+    - ReadWriteMany
+  resources: #Configuración de lo que va a reclamar
+    requests:
+      storage: 5Gi
+
+---
+# configmap postgres
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  labels:
+    app: postgres-config
+data:
+  POSTGRES_DB: pgdb
+  POSTGRES_USER: javi
+  POSTGRES_PASSWORD: "1234"
+
+---
+#deploy postgres
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pg-d
+  labels:
+    app: pg-d
+spec:
+  selector:
+    matchLabels:
+      app: pg-d # no se que es pero creo que es para poder machearlo con el servixe
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: pg-d
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:11
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - configMapRef:
+                name: postgres-config
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: pv-pg
+      volumes:
+        - name: pv-pg
+          persistentVolumeClaim:
+            claimName: pvc-pg
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresdb-service
+spec:
+  selector:
+    app: pg-d
+  ports:
+    - port: 5300
+      targetPort: 5432
+  type: LoadBalancer
+
+
